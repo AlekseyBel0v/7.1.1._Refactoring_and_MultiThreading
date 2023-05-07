@@ -1,81 +1,35 @@
 package ru.netology;
 
 import java.io.*;
-import java.net.ServerSocket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.LocalDateTime;
-import java.util.List;
 
 public class Main {
-  public static void main(String[] args) {
-    final var validPaths = List.of("/index.html", "/spring.svg", "/spring.png", "/resources.html", "/styles.css", "/app.js", "/links.html", "/forms.html", "/classic.html", "/events.html", "/events.js");
-
-    try (final var serverSocket = new ServerSocket(9999)) {
-      while (true) {
-        try (
-            final var socket = serverSocket.accept();
-            final var in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            final var out = new BufferedOutputStream(socket.getOutputStream());
-        ) {
-          // read only request line for simplicity
-          // must be in form GET /path HTTP/1.1
-          final var requestLine = in.readLine();
-          final var parts = requestLine.split(" ");
-
-          if (parts.length != 3) {
-            // just close socket
-            continue;
-          }
-
-          final var path = parts[1];
-          if (!validPaths.contains(path)) {
-            out.write((
-                "HTTP/1.1 404 Not Found\r\n" +
-                    "Content-Length: 0\r\n" +
-                    "Connection: close\r\n" +
-                    "\r\n"
-            ).getBytes());
-            out.flush();
-            continue;
-          }
-
-          final var filePath = Path.of(".", "public", path);
-          final var mimeType = Files.probeContentType(filePath);
-
-          // special case for classic
-          if (path.equals("/classic.html")) {
-            final var template = Files.readString(filePath);
-            final var content = template.replace(
-                "{time}",
-                LocalDateTime.now().toString()
-            ).getBytes();
-            out.write((
-                "HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: " + mimeType + "\r\n" +
-                    "Content-Length: " + content.length + "\r\n" +
-                    "Connection: close\r\n" +
-                    "\r\n"
-            ).getBytes());
-            out.write(content);
-            out.flush();
-            continue;
-          }
-
-          final var length = Files.size(filePath);
-          out.write((
-              "HTTP/1.1 200 OK\r\n" +
-                  "Content-Type: " + mimeType + "\r\n" +
-                  "Content-Length: " + length + "\r\n" +
-                  "Connection: close\r\n" +
-                  "\r\n"
-          ).getBytes());
-          Files.copy(filePath, out);
-          out.flush();
+    public static void main(String[] args) {
+        //Создание файла конфигураций с номером порта и количеством потоков, которые обрабатывают запросы на сервере
+        int port = 9999;
+        int threadQuantity = 64;
+        File configs = new File("src/main/resources/configs.csv");
+        if (!configs.exists()) {
+            try {
+                configs.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            try(BufferedWriter bw = new BufferedWriter(new FileWriter(configs))) {
+                bw.write("port:" + port +"\n" +
+                         "thread quantity:" + threadQuantity);
+                bw.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
-      }
-    } catch (IOException e) {
-      e.printStackTrace();
+        // чтение файла конфигураций
+        try(BufferedReader br = new BufferedReader(new FileReader(configs))) {
+            port = Integer.parseInt(br.readLine().split(":")[1]);
+            threadQuantity = Integer.parseInt(br.readLine().split(":")[1]);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        var server = new Server();
+        server.start(port, threadQuantity);
     }
-  }
 }
